@@ -25,7 +25,6 @@ async function transformImage(buffer, rotation, type) {
         image.rotate(90 * -rotation) // Counterclockwise
             .getBuffer(type, (err, buffer) => {
               if (err) {
-                // console.log(err);
                 app.emit('processing_error', err);
               }
               changedBuffer = buffer;
@@ -41,13 +40,12 @@ async function processMessage(message) {
   let sqsMessage = JSON.parse(message.Body);
   console.log(sqsMessage);
   // Get image
-  const imageObj = await (new Promise((resolve, reject) => {
+  const imageObj = await (new Promise((resolve) => {
       S3.getObject({
         Bucket: 'images-to-process-mstokfisz',
         Key: sqsMessage.key,
       }, (err, data) => {
         if (err) {
-          // console.log(err);
           app.emit('processing_error', err);
         } else {
           resolve(data)
@@ -56,16 +54,15 @@ async function processMessage(message) {
     }));
   const editedImage = await transformImage(imageObj.Body, sqsMessage.rotation, imageObj.ContentType);
   // Upload image
-  await (new Promise((resolve, reject) => {
+  await (new Promise((resolve) => {
     S3.putObject({
       Bucket: 'transformed-images-mstokfisz',
-      Key: sqsMessage.key,
+      Key: new Date().toISOString() + "/" + imageObj.Metadata.filename,
       ACL: 'private',
       Body: editedImage,
       ContentType: imageObj.ContentType
     }, (err, data) => {
       if (err) {
-        // console.log(err);
         app.emit('processing_error', err.message);
       } else {
         resolve(data)
@@ -85,14 +82,14 @@ const app = Consumer.create({
 });
 
 app.on('error', (err) => {
-  console.error(err.message);
+  console.error(err);
   console.log("RESTART");
   app.stop();
   app.start();
 });
 
 app.on('processing_error', (err) => {
-  console.error(err.message);
+  console.error(err);
   console.log("RESTART");
   app.stop();
   app.start();
